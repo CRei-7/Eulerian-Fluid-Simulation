@@ -3,16 +3,23 @@ in vec2 vUV;
 
 out vec4 FragColor;
 
-uniform int uN;
+uniform int uXCount;
+uniform int uYCount;
 uniform float uLineWidth;
 
+uniform sampler2D uSolidMask;
+
 void main(){
-	vec2 cell = fract(vUV * float(uN));//takes fractional part, creating a repeated grid of cells
+	vec2 cell = fract(vUV * vec2(uXCount, uYCount));//takes fractional part, creating a repeated grid of cells
 	float lineX = step(cell.x, uLineWidth) + step(1.0 - uLineWidth, cell.x);//step returns 1 if uLineWidth >= cell.x for the first part, basically labeling a fragment whether it is a line or not
 	float lineY = step(cell.y, uLineWidth) + step(1.0 - uLineWidth, cell.y);
 	float line = clamp(lineX + lineY, 0.0, 1.0);
 
 	vec3 bgColor = vec3(0.0, 0.0, 0.0);
 	vec3 lineColor = vec3(1.0, 1.0, 1.0);
-	FragColor = vec4(mix(bgColor, lineColor, line), 1.0);//interpolates between bgColor and lineColor using line; (1-line)*bgColor + line*lineColor
+
+	float solid = texture(uSolidMask, vUV).r;//for solid cells
+	vec3 solidColor = vec3(1.0, 0.0, 0.0);
+	vec3 base = mix(bgColor, solidColor, solid);
+	FragColor = vec4(mix(base, lineColor, line), 1.0);//interpolates between base and lineColor using line; (1-line)*base + line*lineColor
 }
