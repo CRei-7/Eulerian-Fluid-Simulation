@@ -93,18 +93,48 @@ int main() {
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // safety for tight-packed single-channel rows
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, xCount, yCount, 0, GL_RED, GL_UNSIGNED_BYTE, solidData.data());
 
+	unsigned int velTex;
+	glGenTextures(1, &velTex);
+	glBindTexture(GL_TEXTURE_2D, velTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	fluid.RandomizeVelocities();
+
+	float now = glfwGetTime();
+	float lastTime = now;
+
 	while (!mainWindow.getShouldClose()) {
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		now = glfwGetTime();
+		if (now - lastTime >= 0.25f) {
+			fluid.Simulate(20);
+			lastTime = now;
+		}
+
+		std::vector<float> velMagnitudes = fluid.GetVelocityMagnitudes();
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, velTex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, xCount, yCount, 0, GL_RED, GL_FLOAT, velMagnitudes.data());
+
 
 		shaderList[0].UseShader();
 		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uXCount"), xCount);
 		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uYCount"), yCount);
 		glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uLineWidth"), 0.02f);
+		glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uMaxSpeed"), 1.0f); // Scale factor for normalization
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, solidTex);
 		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uSolidMask"), 0);
+
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, velTex);
+		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uVelMask"), 1);
 
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -115,6 +145,7 @@ int main() {
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
 	glDeleteTextures(1, &solidTex);
+	glDeleteTextures(1, &velTex);
 
 	shaderList[0].ClearShader();
 

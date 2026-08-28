@@ -16,9 +16,19 @@ public:
 
     void UpdateVelocities();
 
-    float GetPressure(int x, int y);
+    void AdvectVelocity();
 
     const bool* GetSolidData() const { return solidCell; }
+
+    float Bilinear(float* edgeValues, int edgeCountX, int edgeCountY, float cellSize, glm::vec2 position);
+
+    float GetPressure(int x, int y);
+    glm::vec2 GetVelocity(glm::vec2 position);
+
+    void Simulate(int iterations);
+
+    void RandomizeVelocities();
+    std::vector<float> GetVelocityMagnitudes();
 
 private:
     int cellCountX;
@@ -28,6 +38,9 @@ private:
     float* velocityX;
     float* velocityY;
 
+    float* velocityX_temp;
+    float* velocityY_temp;
+
     float density;
     float deltaTime;
 
@@ -35,9 +48,17 @@ private:
 
     bool* solidCell;
 
+    glm::vec2 boundsSize;
+    glm::vec2 bottomLeft;
+    float halfCellSize;
+
     int indexXY(int x, int y);
     int indexVX(int x, int y);
     int indexVY(int x, int y);
 
     bool isSolid(int cellX, int cellY);
+
+    glm::vec2 CellCenter(int x, int y);
+    glm::vec2 LeftEdgeCenter(int x, int y);
+    glm::vec2 BottomEdgeCenter(int x, int y);
 };
