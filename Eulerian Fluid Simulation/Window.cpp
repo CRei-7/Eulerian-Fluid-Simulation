@@ -71,7 +71,8 @@ int Window::initialize() {
 
     //Handle Key and Mouse Inputs
     createCallbacks();
-    glfwSetInputMode(mainWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);//This is for disabling cursor
+    glfwSetInputMode(mainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    cursorVisible = true;
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {

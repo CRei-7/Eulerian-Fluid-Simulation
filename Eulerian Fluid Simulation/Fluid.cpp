@@ -3,12 +3,16 @@
 void Fluid::RandomizeVelocities(float t) {
 	for (int x = 0; x < cellCountX + 1; x++) {
 		for (int y = 0; y < cellCountY; y++) {
+			if (isSolid(x - 1, y) || isSolid(x, y))//exclude solid cells from randomization
+				continue;
 			velocityX[indexVX(x, y)] = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * t;
 		}
 	}
 
 	for (int x = 0; x < cellCountX; x++) {
 		for (int y = 0; y < cellCountY + 1; y++) {
+			if (isSolid(x, y - 1) || isSolid(x, y))//exclude solid cells from randomization
+				continue;
 			velocityY[indexVY(x, y)] = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * t;
 		}
 	}
@@ -21,6 +25,9 @@ Fluid::Fluid(int _cellCountX, int _cellCountY, float _cellSize, float _density, 
 
 	density = _density;
 	deltaTime = dt;
+
+	windTunnel = false;
+	inflowSpeed = 0.0f;
 
 	velocityX = new float[(cellCountX + 1) * cellCountY]();
 	velocityY = new float[cellCountX * (cellCountY + 1)]();
@@ -46,6 +53,65 @@ Fluid::Fluid(int _cellCountX, int _cellCountY, float _cellSize, float _density, 
 	halfCellSize = cellSize / 2.0f;
 }
 
+void Fluid::SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHeightCells, glm::vec2 obstacleCenterUV, float obstacleRadiusCells) {
+	windTunnel = true;
+	inflowSpeed = _inflowSpeed;
+
+	int jetLo = static_cast<int>(round(jetCentreUVY * cellCountY - jetHeightCells / 2.0f));// round to nearest cell index
+	int jetHi = jetLo + static_cast<int>(jetHeightCells);// round to nearest cell index
+
+	jetLo = glm::clamp(jetLo, 1, cellCountY - 2);
+	jetHi = glm::clamp(jetHi, jetLo + 1, cellCountY - 1);
+
+	std::fill(solidCell, solidCell + cellCountX * cellCountY, false);
+
+	for (int x = 0; x < cellCountX; x++) {// Top and bottom boundaries are solid cells
+		solidCell[indexXY(x, 0)] = true;
+		solidCell[indexXY(x, cellCountY - 1)] = true;
+	}
+
+	for(int y = 0; y < cellCountY; y++) {
+		if (y < jetLo || y >= jetHi) {
+			solidCell[indexXY(0, y)] = true;// Left boundary is solid except for the inflow jet
+		}
+	}
+
+	//Circular Obstacle
+	glm::vec2 center = bottomLeft + obstacleCenterUV * boundsSize;
+	float radius = obstacleRadiusCells * cellSize;
+
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			if (glm::length(CellCenter(x, y) - center) < radius)
+				solidCell[indexXY(x, y)] = true;
+		}
+	}
+
+	// Initialize the velocity and pressure fields to zero, then set the inflow speed on the left boundary faces.
+	std::fill(velocityX, velocityX + (cellCountX + 1) * cellCountY, 0.0f);
+	std::fill(velocityY, velocityY + cellCountX * (cellCountY + 1), 0.0f);
+	std::fill(cellPressure, cellPressure + cellCountX * cellCountY, 0.0f);
+
+	for (int x = 0; x < cellCountX + 1; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			if (isSolid(x - 1, y) || isSolid(x, y))
+				continue;
+			velocityX[indexVX(x, y)] = inflowSpeed;
+		}
+	}
+}
+
+void Fluid::ApplyInflow() {
+	if (!windTunnel)
+		return;
+
+	for (int y = 0; y < cellCountY; y++) {
+		if (isSolid(0, y))
+			continue;
+		velocityX[indexVX(0, y)] = inflowSpeed;// Set the inflow speed on the left boundary faces
+	}
+}
+
 std::vector<float> Fluid::GetVelocityMagnitudes() {
 	std::vector<float> magnitudes(cellCountX * cellCountY);
 
@@ -60,7 +126,7 @@ std::vector<float> Fluid::GetVelocityMagnitudes() {
 }
 
 void Fluid::Simulate(int iterations) {
-	std::fill(cellPressure, cellPressure + (cellCountX * cellCountY), 0.0f); // resets the Pressure field
+	ApplyInflow();
 
 	for (int i = 0; i < iterations; i++) {
 		PressureSolver();
@@ -82,7 +148,8 @@ void Fluid::AdvectVelocity() {
 
 			glm::vec2 vel = GetVelocity(pos);
 
-			glm::vec2 posPrev =	pos - vel * deltaTime;
+			glm::vec2 posMid = pos - vel * (deltaTime * 0.5f);
+			glm::vec2 posPrev = pos - GetVelocity(posMid) * deltaTime;
 
 			velocityX_temp[indexVX(x, y)] =	GetVelocity(posPrev).x;
 		}
@@ -100,7 +167,8 @@ void Fluid::AdvectVelocity() {
 
 			glm::vec2 vel = GetVelocity(pos);
 
-			glm::vec2 posPrev =	pos - vel * deltaTime;
+			glm::vec2 posMid = pos - vel * (deltaTime * 0.5f);
+			glm::vec2 posPrev = pos - GetVelocity(posMid) * deltaTime;
 
 			velocityY_temp[indexVY(x, y)] =	GetVelocity(posPrev).y;
 		}
@@ -135,6 +203,9 @@ float Fluid::CalcDivergence(int cellX, int cellY) {
 void Fluid::UpdateVelocities() {
 	for (int i = 0; i < (cellCountX + 1); i++) {
 		for (int j = 0; j < cellCountY; j++) {
+			if (windTunnel && i == 0 && !isSolid(0, j))
+				continue;
+
 			if (isSolid(i, j) || isSolid(i - 1, j)) {
 				velocityX[indexVX(i, j)] = 0;
 				continue;
@@ -304,8 +375,12 @@ int Fluid::indexVY(int x, int y) {
 }
 
 bool::Fluid::isSolid(int cellX, int cellY) {
-	if (cellX < 0 || cellX >= cellCountX || cellY < 0 || cellY >= cellCountY)
+	if (cellX < 0 || cellY < 0 || cellY >= cellCountY)
 		return true;
+
+	if (cellX >= cellCountX)// The right boundary is not solid in a wind tunnel, so we don't return true here.
+		return !windTunnel;
+
 	return solidCell[indexXY(cellX, cellY)];
 }
 

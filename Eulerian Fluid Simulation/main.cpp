@@ -36,6 +36,15 @@ const unsigned int yCount = 100;
 float density = 1000.0f;
 float deltaTime = 1.0f / 60.0f;
 
+const float inflowSpeed = 2.0f;
+const glm::vec2 obstacleCenterUV(0.30f, 0.50f); 
+const float obstacleRadiusCells = 9.0f;
+
+const float jetCentreUVY = 0.5f; // vertical centre of the inflow jet
+const float jetHeightCells = 100.0f; // height of the inflow jet in cells
+
+const float maxSpeed = inflowSpeed * 1.5f;
+
 Fluid fluid(xCount, yCount, 1.0f / xCount, density, deltaTime);
 
 void CreateShaders() {
@@ -49,6 +58,8 @@ int main() {
 	mainWindow.initialize();
 
 	CreateShaders();
+
+	fluid.SetupWindTunnel(inflowSpeed, jetCentreUVY, jetHeightCells, obstacleCenterUV, obstacleRadiusCells);
 
 	float quadVertices[] = {
 		-1.0f, -1.0f, 0.0f, 0.0f,
@@ -107,9 +118,9 @@ int main() {
 	fluid.RandomizeVelocities(2.0f);
 
 	std::vector<float> velMagnitudes = fluid.GetVelocityMagnitudes();
-	float maxSpeed = 0.0001f;
+	/*float maxSpeed = 0.0001f;
 	for (float m : velMagnitudes)
-		maxSpeed = std::max(maxSpeed, m);
+		maxSpeed = std::max(maxSpeed, m);*/
 	//glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uMaxSpeed"), maxSpeed); // Scale factor for normalization
 
 	while (!mainWindow.getShouldClose()) {

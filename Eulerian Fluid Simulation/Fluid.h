@@ -32,6 +32,8 @@ public:
 
     void AddVelocity(glm::vec2 uv, glm::vec2 velocity, float radiusCells);
 
+    void SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHeightCells, glm::vec2 obstacleCenterUV, float obstacleRadiusCells);
+
 private:
     int cellCountX;
     int cellCountY;
@@ -63,4 +65,9 @@ private:
     glm::vec2 CellCenter(int x, int y);
     glm::vec2 LeftEdgeCenter(int x, int y);
     glm::vec2 BottomEdgeCenter(int x, int y);
+
+    bool windTunnel;
+    float inflowSpeed;
+
+    void ApplyInflow();
 };
