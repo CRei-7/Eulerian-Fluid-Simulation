@@ -27,8 +27,10 @@ public:
 
     void Simulate(int iterations);
 
-    void RandomizeVelocities();
+    void RandomizeVelocities(float t);
     std::vector<float> GetVelocityMagnitudes();
+
+    void AddVelocity(glm::vec2 uv, glm::vec2 velocity, float radiusCells);
 
 private:
     int cellCountX;

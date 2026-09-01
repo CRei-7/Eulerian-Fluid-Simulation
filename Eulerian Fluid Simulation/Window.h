@@ -22,6 +22,8 @@ public:
 	GLfloat getxChange();
 	GLfloat getyChange();
 
+	bool isMouseButtonPressed(int button);
+
 	void swapBuffers() { glfwSwapBuffers(mainWindow); }
 
 	GLFWwindow* getGLFWwindow() { return mainWindow; }
@@ -38,6 +40,7 @@ private:
 
 	//For checking if key is pressed
 	bool keys[1024]; //1024 for ASCII
+	bool mouseButtons[8];//GLFW defines 8 mouse buttons total.
 
 	GLfloat lastX, lastY, xChange, yChange; //to compare coordinates to calculate changes
 	bool mouseFirstMoved; //for first mouse movement
@@ -49,5 +52,6 @@ private:
 	//static is to be used for callback, using just void means the function is only applicable for a single object
 	static void handleKeys(GLFWwindow* window, int key, int code, int action, int mode);//these variables are required for the callback
 	static void handleMouse(GLFWwindow* window, double xPos, double yPos);
+	static void handleMouseButton(GLFWwindow* window, int button, int action, int mods);
 };
 

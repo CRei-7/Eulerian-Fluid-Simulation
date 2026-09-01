@@ -13,9 +13,13 @@ uniform sampler2D uVelMask;
 
 void main(){
 	vec2 cell = fract(vUV * vec2(uXCount, uYCount));//takes fractional part, creating a repeated grid of cells
-	float lineX = step(cell.x, uLineWidth) + step(1.0 - uLineWidth, cell.x);//step returns 1 if uLineWidth >= cell.x for the first part, basically labeling a fragment whether it is a line or not
-	float lineY = step(cell.y, uLineWidth) + step(1.0 - uLineWidth, cell.y);
-	float line = clamp(lineX + lineY, 0.0, 1.0);
+	
+	float line = 0.0f;
+	if(line > 0.0){
+		float lineX = step(cell.x, uLineWidth) + step(1.0 - uLineWidth, cell.x);//step returns 1 if uLineWidth >= cell.x for the first part, basically labeling a fragment whether it is a line or not
+		float lineY = step(cell.y, uLineWidth) + step(1.0 - uLineWidth, cell.y);
+		line = clamp(lineX + lineY, 0.0, 1.0);
+	}
 
 	float speed = texture(uVelMask, vUV).r;
 	float normSpeed = clamp(speed / uMaxSpeed, 0.0, 1.0);

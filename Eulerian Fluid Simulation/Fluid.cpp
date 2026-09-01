@@ -1,15 +1,15 @@
 #include "Fluid.h"
 
-void Fluid::RandomizeVelocities() {
+void Fluid::RandomizeVelocities(float t) {
 	for (int x = 0; x < cellCountX + 1; x++) {
 		for (int y = 0; y < cellCountY; y++) {
-			velocityX[indexVX(x, y)] = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * 5.0f;
+			velocityX[indexVX(x, y)] = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * t;
 		}
 	}
 
 	for (int x = 0; x < cellCountX; x++) {
 		for (int y = 0; y < cellCountY + 1; y++) {
-			velocityY[indexVY(x, y)] = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * 5.0f;
+			velocityY[indexVY(x, y)] = (static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f) * t;
 		}
 	}
 }
@@ -60,6 +60,8 @@ std::vector<float> Fluid::GetVelocityMagnitudes() {
 }
 
 void Fluid::Simulate(int iterations) {
+	std::fill(cellPressure, cellPressure + (cellCountX * cellCountY), 0.0f); // resets the Pressure field
+
 	for (int i = 0; i < iterations; i++) {
 		PressureSolver();
 	}
@@ -194,7 +196,7 @@ void Fluid::CellPressureSolver(int cellX, int cellY) {
 
 	float oldPressure = cellPressure[indexXY(cellX, cellY)];
 
-	cellPressure[indexXY(cellX, cellY)] = oldPressure + (newPressure - oldPressure) * 1.7;
+	cellPressure[indexXY(cellX, cellY)] = oldPressure + (newPressure - oldPressure) * 1.7f;
 }
 
 
@@ -230,6 +232,41 @@ glm::vec2 Fluid::GetVelocity(glm::vec2 position) {
 	float yVel = Bilinear(velocityY, cellCountX, cellCountY + 1, cellSize, position);
 
 	return glm::vec2(xVel, yVel);
+}
+
+void Fluid::AddVelocity(glm::vec2 uv, glm::vec2 velocity, float radiusCells) {
+	glm::vec2 worldPos = bottomLeft + uv * boundsSize;
+	float radius = radiusCells * cellSize;
+
+	// Splat onto horizontal velocity edges
+	for (int x = 0; x < cellCountX + 1; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			if (isSolid(x - 1, y) || isSolid(x, y)) 
+				continue;
+
+			float dist = glm::length(LeftEdgeCenter(x, y) - worldPos);
+			if (dist > radius) 
+				continue;
+
+			float falloff = 1.0f - (dist / radius); // linear falloff, full strength at center
+			velocityX[indexVX(x, y)] += velocity.x * falloff;
+		}
+	}
+
+	// Splat onto vertical velocity edges
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY + 1; y++) {
+			if (isSolid(x, y - 1) || isSolid(x, y)) 
+				continue;
+
+			float dist = glm::length(BottomEdgeCenter(x, y) - worldPos);
+			if (dist > radius) 
+				continue;
+
+			float falloff = 1.0f - (dist / radius);
+			velocityY[indexVY(x, y)] += velocity.y * falloff;
+		}
+	}
 }
 
 glm::vec2 Fluid::CellCenter(int x, int y)

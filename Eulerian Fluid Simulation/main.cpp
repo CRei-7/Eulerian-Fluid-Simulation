@@ -30,8 +30,8 @@ std::vector<Shader> shaderList;
 
 const char* glsl_version = "#version 430";
 
-const unsigned int xCount = 16;
-const unsigned int yCount = 16;
+const unsigned int xCount = 100;
+const unsigned int yCount = 100;
 
 float density = 1000.0f;
 float deltaTime = 1.0f / 60.0f;
@@ -101,32 +101,48 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	fluid.RandomizeVelocities();
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, velTex);
 
-	float now = glfwGetTime();
-	float lastTime = now;
+	fluid.RandomizeVelocities(2.0f);
+
+	std::vector<float> velMagnitudes = fluid.GetVelocityMagnitudes();
+	float maxSpeed = 0.0001f;
+	for (float m : velMagnitudes)
+		maxSpeed = std::max(maxSpeed, m);
+	//glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uMaxSpeed"), maxSpeed); // Scale factor for normalization
 
 	while (!mainWindow.getShouldClose()) {
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		double mouseXPos, mouseYPos;
+		glfwGetCursorPos(mainWindow.getGLFWwindow(), &mouseXPos, &mouseYPos);
 
-		now = glfwGetTime();
-		if (now - lastTime >= 0.25f) {
-			fluid.Simulate(20);
-			lastTime = now;
+		glm::vec2 mouseUV(
+			static_cast<float>(mouseXPos) / SCR_WIDTH,
+			1.0f - static_cast<float>(mouseYPos) / SCR_HEIGHT // since screen Y is down, world Y is up
+		);
+
+		GLfloat dx = mainWindow.getxChange();
+		GLfloat dy = mainWindow.getyChange();
+
+		if (mainWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+			const float mouseStrength = 60.0f;
+			glm::vec2 mouseVelocity(dx / SCR_WIDTH * mouseStrength, dy / SCR_HEIGHT * mouseStrength);
+			fluid.AddVelocity(mouseUV, mouseVelocity, 8.0f);
 		}
 
-		std::vector<float> velMagnitudes = fluid.GetVelocityMagnitudes();
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, velTex);
+		fluid.Simulate(40);
+
+		velMagnitudes = fluid.GetVelocityMagnitudes();
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, xCount, yCount, 0, GL_RED, GL_FLOAT, velMagnitudes.data());
 
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		shaderList[0].UseShader();
 		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uXCount"), xCount);
 		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uYCount"), yCount);
-		glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uLineWidth"), 0.02f);
-		glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uMaxSpeed"), 1.0f); // Scale factor for normalization
+		glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uLineWidth"), 0.0f);
+		glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uMaxSpeed"), maxSpeed); // Scale factor for normalization
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, solidTex);

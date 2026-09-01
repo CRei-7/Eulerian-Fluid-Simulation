@@ -8,13 +8,17 @@ Window::Window() {
         keys[i] = 0;
     }
 
+    for (size_t i = 0; i < 8; i++) {
+        mouseButtons[i] = false;
+    }
+
     mouseFirstMoved = true;
 
     //This is so that camera does not start at a random direction
     xChange = 0.0f;
     yChange = 0.0f;
 
-    cursorVisible = false; // Start with cursor hidden
+    cursorVisible = true; // Start with cursor visible
 }
 
 Window::Window(GLint windowWidth, GLint windowHeight) {
@@ -25,13 +29,17 @@ Window::Window(GLint windowWidth, GLint windowHeight) {
         keys[i] = 0;
     }
 
+    for (size_t i = 0; i < 8; i++) {
+        mouseButtons[i] = false;
+    }
+
     mouseFirstMoved = true;
 
     //This is so that camera does not start at a random direction
     xChange = 0.0f;
     yChange = 0.0f;
 
-    cursorVisible = false; // Start with cursor hidden
+    cursorVisible = true; // Start with cursor visible
 }
 
 int Window::initialize() {
@@ -85,6 +93,7 @@ int Window::initialize() {
 void Window::createCallbacks() {
     glfwSetKeyCallback(mainWindow, handleKeys);//if key is pressed in mainWindow, call handleKeys function
     glfwSetCursorPosCallback(mainWindow, handleMouse);//for cursor
+    glfwSetMouseButtonCallback(mainWindow, handleMouseButton);
 }
 
 GLfloat Window::getxChange() {//This function is not really that necessary
@@ -97,6 +106,10 @@ GLfloat Window::getyChange() {//This function is not really that necessary
     GLfloat theChange = yChange;
     yChange = 0.0f;
     return theChange;
+}
+
+bool Window::isMouseButtonPressed(int button) {
+    return button >= 0 && button < 8 && mouseButtons[button]; 
 }
 
 void Window::handleKeys(GLFWwindow* window, int key, int code, int action, int mode) {//No need to use static here
@@ -124,9 +137,9 @@ void Window::handleKeys(GLFWwindow* window, int key, int code, int action, int m
 void Window::handleMouse(GLFWwindow* window, double xPos, double yPos) {
     Window* theWindow = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-    if (theWindow->cursorVisible) {
-        return; // Ignore mouse movement when cursor is visible
-    }
+    //if (theWindow->cursorVisible) {
+    //    return; // Ignore mouse movement when cursor is visible
+    //}
 
     GLfloat xPosition = static_cast<GLfloat>(xPos);
     GLfloat yPosition = static_cast<GLfloat>(yPos);
@@ -153,6 +166,14 @@ void Window::toggleCursorVisibility() {
     else {
         glfwSetInputMode(mainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL); // Show cursor
         cursorVisible = true;
+    }
+}
+
+void Window::handleMouseButton(GLFWwindow* window, int button, int action, int mods) {
+    Window* theWindow = static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+    if (button >= 0 && button < 8) {
+        theWindow->mouseButtons[button] = (action != GLFW_RELEASE);
     }
 }
 
