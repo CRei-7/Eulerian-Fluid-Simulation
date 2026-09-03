@@ -238,10 +238,6 @@ void Fluid::AdvectDye() {
 	//advect the dye backward in time
 	for (int x = 0; x < cellCountX; x++) {
 		for (int y = 0; y < cellCountY; y++) {
-			if (isSolid(x, y)) {
-				dye_back[indexXY(x, y)] = 0.0f;
-				continue;
-			}
 
 			glm::vec2 pos = CellCenter(x, y);
 			glm::vec2 vel = GetVelocity(pos);
@@ -257,10 +253,6 @@ void Fluid::AdvectDye() {
 
 	for (int x = 0; x < cellCountX; x++) {
 		for (int y = 0; y < cellCountY; y++) {
-			if (isSolid(x, y)) {
-				dye_back[indexXY(x, y)] = 0.0f;
-				continue;
-			}
 
 			glm::vec2 pos = CellCenter(x, y);
 			glm::vec2 vel = GetVelocity(pos);
@@ -287,12 +279,8 @@ void Fluid::ClearDye() {
 	for (int x = 0; x < cellCountX; x++) {
 		for (int y = 0; y < cellCountY; y++) {
 			dye[indexXY(x, y)] = 0.0f;
-		}
-	}
-
-	for (int x = 0; x < cellCountX; x++) {
-		for (int y = 0; y < cellCountY; y++) {
 			dye_temp[indexXY(x, y)] = 0.0f;
+			dye_back[indexXY(x, y)] = 0.0f;
 		}
 	}
 }
