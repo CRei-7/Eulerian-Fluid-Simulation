@@ -10,6 +10,7 @@ uniform float uMaxSpeed;
 
 uniform sampler2D uSolidMask;
 uniform sampler2D uVelMask;
+uniform sampler2D uDyeMask;
 
 void main(){
 	vec2 cell = fract(vUV * vec2(uXCount, uYCount));//takes fractional part, creating a repeated grid of cells
@@ -24,7 +25,12 @@ void main(){
 	float speed = texture(uVelMask, vUV).r;
 	float normSpeed = clamp(speed / uMaxSpeed, 0.0, 1.0);
 
-	vec3 flowColor = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), normSpeed);
+	float dye = clamp(texture(uDyeMask, vUV).r, 0.0, 1.0);
+
+	vec3 background = vec3(0.0, 0.0, 0.0);
+	vec3 dyeColor = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0), normSpeed);
+
+	vec3 flowColor = mix(background, dyeColor, dye);
 	vec3 lineColor = vec3(1.0, 1.0, 1.0);
 
 	float solid = texture(uSolidMask, vUV).r;//for solid cells

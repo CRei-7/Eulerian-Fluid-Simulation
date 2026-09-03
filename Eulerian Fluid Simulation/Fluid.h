@@ -9,14 +9,12 @@ public:
     Fluid(int _cellCountX, int _cellCountY, float _cellSize, float _density, float _dt);
     ~Fluid();
 
-    float CalcDivergence(int cellX, int cellY);
-
     void CellPressureSolver(int cellX, int cellY);
     void PressureSolver();
 
     void UpdateVelocities();
 
-    void AdvectVelocity();
+    void AdvectVelocity(); 
 
     const bool* GetSolidData() const { return solidCell; }
 
@@ -33,6 +31,19 @@ public:
     void AddVelocity(glm::vec2 uv, glm::vec2 velocity, float radiusCells);
 
     void SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHeightCells, glm::vec2 obstacleCenterUV, float obstacleRadiusCells);
+
+    void AdvectDye();
+    void EmitDye(glm::vec2 uv, float radiusCells, float strength = 1.0f);
+    void ClearDye();
+
+    void SampleDyeMinMax(float* field, glm::vec2 position, float& outMin, float& outMax);
+
+    const float* GetDyeData() const { return dye; }
+	void SetDyeDecay(float decay) { dyeDecay = decay; }
+
+    void resetVelocityX();
+    void resetVelocityY();
+    void resetCellPressure();
 
 private:
     int cellCountX;
@@ -70,4 +81,9 @@ private:
     float inflowSpeed;
 
     void ApplyInflow();
+
+    float* dye;
+    float* dye_temp;
+    float* dye_back;
+    float dyeDecay;
 };

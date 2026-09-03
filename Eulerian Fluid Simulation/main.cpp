@@ -30,20 +30,24 @@ std::vector<Shader> shaderList;
 
 const char* glsl_version = "#version 430";
 
-const unsigned int xCount = 100;
-const unsigned int yCount = 100;
+const unsigned int xCount = 120;
+const unsigned int yCount = static_cast<unsigned int>(static_cast<float>(xCount) * SCR_HEIGHT / SCR_WIDTH);
 
 float density = 1000.0f;
 float deltaTime = 1.0f / 60.0f;
 
 const float inflowSpeed = 2.0f;
-const glm::vec2 obstacleCenterUV(0.30f, 0.50f); 
+const glm::vec2 obstacleCenterUV(0.3f, 0.50f); 
 const float obstacleRadiusCells = 9.0f;
 
 const float jetCentreUVY = 0.5f; // vertical centre of the inflow jet
-const float jetHeightCells = 100.0f; // height of the inflow jet in cells
+const float jetHeightCells = static_cast<float>(yCount); // height of the inflow jet in cells
 
 const float maxSpeed = inflowSpeed * 1.5f;
+
+const float dyeEmitUVX = 0.0f;// x position of the dye emitter
+const float dyeEmitRadiusCells = 2.0f;
+const float dyeDecayRate = 2.0f;
 
 Fluid fluid(xCount, yCount, 1.0f / xCount, density, deltaTime);
 
@@ -60,6 +64,7 @@ int main() {
 	CreateShaders();
 
 	fluid.SetupWindTunnel(inflowSpeed, jetCentreUVY, jetHeightCells, obstacleCenterUV, obstacleRadiusCells);
+	fluid.SetDyeDecay(dyeDecayRate);
 
 	float quadVertices[] = {
 		-1.0f, -1.0f, 0.0f, 0.0f,
@@ -112,16 +117,17 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, velTex);
+	unsigned int dyeTex;
+	glGenTextures(1, &dyeTex);
+	glBindTexture(GL_TEXTURE_2D, dyeTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	fluid.RandomizeVelocities(2.0f);
 
 	std::vector<float> velMagnitudes = fluid.GetVelocityMagnitudes();
-	/*float maxSpeed = 0.0001f;
-	for (float m : velMagnitudes)
-		maxSpeed = std::max(maxSpeed, m);*/
-	//glUniform1f(glGetUniformLocation(shaderList[0].GetShaderID(), "uMaxSpeed"), maxSpeed); // Scale factor for normalization
 
 	while (!mainWindow.getShouldClose()) {
 		double mouseXPos, mouseYPos;
@@ -141,10 +147,19 @@ int main() {
 			fluid.AddVelocity(mouseUV, mouseVelocity, 8.0f);
 		}
 
+		fluid.EmitDye(glm::vec2(dyeEmitUVX, jetCentreUVY), dyeEmitRadiusCells);
+		fluid.EmitDye(glm::vec2(dyeEmitUVX, jetCentreUVY), dyeEmitRadiusCells);
+
 		fluid.Simulate(40);
 
 		velMagnitudes = fluid.GetVelocityMagnitudes();
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, velTex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, xCount, yCount, 0, GL_RED, GL_FLOAT, velMagnitudes.data());
+
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, dyeTex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, xCount, yCount, 0, GL_RED, GL_FLOAT, fluid.GetDyeData());
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -163,6 +178,10 @@ int main() {
 		glBindTexture(GL_TEXTURE_2D, velTex);
 		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uVelMask"), 1);
 
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, dyeTex);
+		glUniform1i(glGetUniformLocation(shaderList[0].GetShaderID(), "uDyeMask"), 2);
+
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
@@ -173,6 +192,7 @@ int main() {
 	glDeleteBuffers(1, &VBO);
 	glDeleteTextures(1, &solidTex);
 	glDeleteTextures(1, &velTex);
+	glDeleteTextures(1, &dyeTex);
 
 	shaderList[0].ClearShader();
 

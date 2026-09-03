@@ -38,6 +38,11 @@ Fluid::Fluid(int _cellCountX, int _cellCountY, float _cellSize, float _density, 
 	cellPressure = new float[cellCountX * cellCountY]();
 	solidCell = new bool[cellCountX * cellCountY]();//Initializes false
 
+	dye = new float[cellCountX * cellCountY]();
+	dye_temp = new float[cellCountX * cellCountY]();
+	dye_back = new float[cellCountX * cellCountY]();
+	dyeDecay = 0.0f;
+
 	for (int i = 0; i < cellCountX; i++) {// Boundary cells are solid cells
 		solidCell[indexXY(i, 0)] = true;
 		solidCell[indexXY(i, cellCountY - 1)] = true;
@@ -63,7 +68,11 @@ void Fluid::SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHei
 	jetLo = glm::clamp(jetLo, 1, cellCountY - 2);
 	jetHi = glm::clamp(jetHi, jetLo + 1, cellCountY - 1);
 
-	std::fill(solidCell, solidCell + cellCountX * cellCountY, false);
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			solidCell[indexXY(x, y)] = false;
+		}
+	}
 
 	for (int x = 0; x < cellCountX; x++) {// Top and bottom boundaries are solid cells
 		solidCell[indexXY(x, 0)] = true;
@@ -88,9 +97,9 @@ void Fluid::SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHei
 	}
 
 	// Initialize the velocity and pressure fields to zero, then set the inflow speed on the left boundary faces.
-	std::fill(velocityX, velocityX + (cellCountX + 1) * cellCountY, 0.0f);
-	std::fill(velocityY, velocityY + cellCountX * (cellCountY + 1), 0.0f);
-	std::fill(cellPressure, cellPressure + cellCountX * cellCountY, 0.0f);
+	resetVelocityX();
+	resetVelocityY();
+	resetCellPressure();
 
 	for (int x = 0; x < cellCountX + 1; x++) {
 		for (int y = 0; y < cellCountY; y++) {
@@ -99,6 +108,8 @@ void Fluid::SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHei
 			velocityX[indexVX(x, y)] = inflowSpeed;
 		}
 	}
+
+	ClearDye();
 }
 
 void Fluid::ApplyInflow() {
@@ -133,6 +144,7 @@ void Fluid::Simulate(int iterations) {
 	}
 
 	UpdateVelocities(); // applying the converged pressure gradient once
+	AdvectDye();
 	AdvectVelocity(); // moves the now divergence free field through itself
 }
 
@@ -187,17 +199,102 @@ void Fluid::AdvectVelocity() {
 	}
 }
 
-float Fluid::CalcDivergence(int cellX, int cellY) {
-	float velocityTop = velocityY[indexVY(cellX, cellY + 1)];
-	float velocityLeft = velocityX[indexVX(cellX, cellY)];
-	float velocityRight = velocityX[indexVX(cellX + 1, cellY)];
-	float velocityBottom = velocityY[indexVY(cellX, cellY)];
+void Fluid::EmitDye(glm::vec2 xy, float radiusCells, float strength) {
+	glm::vec2 worldPos = bottomLeft + xy * boundsSize;
+	float radius = radiusCells * cellSize;
 
-	//u_i = (u_i+1/2 - u_i-1/2)/w
-	float gradientX = (velocityRight - velocityLeft) / cellSize;
-	float gradientY = (velocityTop - velocityBottom) / cellSize;
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			if (isSolid(x, y))
+				continue;
 
-	return (gradientX + gradientY);
+			float dist = glm::length(CellCenter(x, y) - worldPos);
+			if (dist > radius)
+				continue;
+
+			dye[indexXY(x, y)] = glm::max(dye[indexXY(x, y)], strength);
+		}
+	}
+}
+
+void Fluid::AdvectDye() {
+	//Advection is done in two steps to reduce numerical diffusion. First, we advect the dye field forward in time to a temporary field, then we advect it back to the original field. This is the MacCormack method.
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			if (isSolid(x, y)) {
+				dye_temp[indexXY(x, y)] = 0.0f;
+				continue;
+			}
+
+			glm::vec2 pos = CellCenter(x, y);
+			glm::vec2 vel = GetVelocity(pos);
+			glm::vec2 posMid = pos - vel * (deltaTime * 0.5f);
+			glm::vec2 posPrev = pos - GetVelocity(posMid) * deltaTime;
+
+			dye_temp[indexXY(x, y)] = Bilinear(dye, cellCountX, cellCountY, cellSize, posPrev);
+		}
+	}
+
+	//advect the dye backward in time
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			if (isSolid(x, y)) {
+				dye_back[indexXY(x, y)] = 0.0f;
+				continue;
+			}
+
+			glm::vec2 pos = CellCenter(x, y);
+			glm::vec2 vel = GetVelocity(pos);
+			glm::vec2 posMid = pos + vel * (deltaTime * 0.5f);
+			glm::vec2 posNext = pos + GetVelocity(posMid) * deltaTime;
+
+			dye_back[indexXY(x, y)] = Bilinear(dye_temp, cellCountX, cellCountY, cellSize, posNext);
+		}
+	}
+
+	// Apply dye decay
+	float fade = (dyeDecay > 0.0f) ? exp(-deltaTime * dyeDecay) : 1.0f;
+
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			if (isSolid(x, y)) {
+				dye_back[indexXY(x, y)] = 0.0f;
+				continue;
+			}
+
+			glm::vec2 pos = CellCenter(x, y);
+			glm::vec2 vel = GetVelocity(pos);
+			glm::vec2 posMid = pos - vel * (deltaTime * 0.5f);
+			glm::vec2 posPrev = pos - GetVelocity(posMid) * deltaTime;
+
+			float stencilMin, stencilMax;// Find the minimum and maximum dye values of the surrounding cells to prevent overshooting during the MacCormack correction step
+			SampleDyeMinMax(dye, posPrev, stencilMin, stencilMax);
+
+			float corrected = dye_temp[indexXY(x, y)] + 0.5f * (dye[indexXY(x, y)] - dye_back[indexXY(x, y)]);// MacCormack correction step
+
+			dye_back[indexXY(x, y)] = glm::clamp(corrected, stencilMin, stencilMax) * fade;//Makes sure the dye value is within the bounds of the surrounding cells and applies decay
+		}
+	}
+
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			dye[indexXY(x, y)] = dye_back[indexXY(x, y)];
+		}
+	}
+}
+
+void Fluid::ClearDye() {
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			dye[indexXY(x, y)] = 0.0f;
+		}
+	}
+
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			dye_temp[indexXY(x, y)] = 0.0f;
+		}
+	}
 }
 
 void Fluid::UpdateVelocities() {
@@ -275,6 +372,7 @@ float Fluid::Bilinear(float* edgeValues, int edgeCountX, int edgeCountY, float c
 	float width = (edgeCountX - 1) * cellSize;
 	float height = (edgeCountY - 1) * cellSize;
 
+	//px and py represent the position relative to the grid's cell indices.
 	float px = (position.x + width / 2) / cellSize;// normalized indices of the current cell
 	float py = (position.y + height / 2) / cellSize;
 
@@ -297,6 +395,30 @@ float Fluid::Bilinear(float* edgeValues, int edgeCountX, int edgeCountY, float c
 
 	return glm::mix(valueBottom, valueTop, yFrac);// Linear interpolation at the position using top and bottom values
 }
+
+void Fluid::SampleDyeMinMax(float* field, glm::vec2 position, float& outMin, float& outMax) {
+	float width = (cellCountX - 1) * cellSize;
+	float height = (cellCountY - 1) * cellSize;
+
+	//px and py represent the position relative to the grid's cell indices.
+	float px = (position.x + width / 2) / cellSize;// normalized indices of the current cell
+	float py = (position.y + height / 2) / cellSize;
+
+	int left = glm::clamp(static_cast<int>(px), 0, cellCountX - 2);
+	int bottom = glm::clamp(static_cast<int>(py), 0, cellCountY - 2);
+	int right = left + 1;
+	int top = bottom + 1;
+
+	// Get the dye values at the four corners of the 2x2 stencil.
+	float bottomLeftValue = field[left + bottom * cellCountX];
+	float bottomRightValue = field[right + bottom * cellCountX];
+	float topLeftValue = field[left + top * cellCountX];
+	float topRightValue = field[right + top * cellCountX];
+
+	outMin = glm::min(glm::min(bottomLeftValue, bottomRightValue), glm::min(topLeftValue, topRightValue));
+	outMax = glm::max(glm::max(bottomLeftValue, bottomRightValue), glm::max(topLeftValue, topRightValue));
+}
+
 
 glm::vec2 Fluid::GetVelocity(glm::vec2 position) {
 	float xVel = Bilinear(velocityX, cellCountX + 1, cellCountY, cellSize, position);
@@ -336,6 +458,30 @@ void Fluid::AddVelocity(glm::vec2 uv, glm::vec2 velocity, float radiusCells) {
 
 			float falloff = 1.0f - (dist / radius);
 			velocityY[indexVY(x, y)] += velocity.y * falloff;
+		}
+	}
+}
+
+void Fluid::resetVelocityX() {
+	for (int x = 0; x < (cellCountX + 1); x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			velocityX[indexVX(x, y)] = 0.0f;
+		}
+	}
+}
+
+void Fluid::resetVelocityY() {
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < (cellCountY + 1); y++) {
+			velocityY[indexVY(x, y)] = 0.0f;
+		}
+	}
+}
+
+void Fluid::resetCellPressure() {
+	for (int x = 0; x < cellCountX; x++) {
+		for (int y = 0; y < cellCountY; y++) {
+			cellPressure[indexXY(x, y)] = 0.0f;
 		}
 	}
 }
@@ -391,4 +537,7 @@ Fluid::~Fluid() {
 	delete[] velocityY_temp;   
 	delete[] cellPressure;     
 	delete[] solidCell;
+	delete[] dye;
+	delete[] dye_temp;
+	delete[] dye_back;
 }
