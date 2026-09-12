@@ -29,6 +29,17 @@ Fluid::Fluid(int _cellCountX, int _cellCountY, float _cellSize, float _density, 
 	windTunnel = false;
 	inflowSpeed = 0.0f;
 
+	windTunnelExitOpen = true;
+	jetCentreUVY = 0.5f;
+	jetHeightCells = 0.0f;
+
+	obstacleEnabled = false;
+	obstacleType = ObstacleType::None;
+	obstacleCenterUV = glm::vec2(0.0f);
+	obstacleRadiusCells = 0.0f;
+	obstacleHeightCells = 0.0f;
+	obstacleThicknessCells = 0.0f;
+
 	velocityX = new float[(cellCountX + 1) * cellCountY]();
 	velocityY = new float[cellCountX * (cellCountY + 1)]();
 
@@ -43,73 +54,136 @@ Fluid::Fluid(int _cellCountX, int _cellCountY, float _cellSize, float _density, 
 	dye_back = new float[cellCountX * cellCountY]();
 	dyeDecay = 0.0f;
 
-	for (int i = 0; i < cellCountX; i++) {// Boundary cells are solid cells
-		solidCell[indexXY(i, 0)] = true;
-		solidCell[indexXY(i, cellCountY - 1)] = true;
-	}
+	//for (int i = 0; i < cellCountX; i++) {// Boundary cells are solid cells
+	//	solidCell[indexXY(i, 0)] = true;
+	//	solidCell[indexXY(i, cellCountY - 1)] = true;
+	//}
 
-	for (int i = 0; i < cellCountY; i++) {
-		solidCell[indexXY(0, i)] = true;
-		solidCell[indexXY(cellCountX - 1, i)] = true;
-	}
+	//for (int i = 0; i < cellCountY; i++) {
+	//	solidCell[indexXY(0, i)] = true;
+	//	solidCell[indexXY(cellCountX - 1, i)] = true;
+	//}
 
 	boundsSize = glm::vec2(static_cast<float>(cellCountX), static_cast<float>(cellCountY)) * cellSize;
 	bottomLeft = -(boundsSize / 2.0f);
 	halfCellSize = cellSize / 2.0f;
+
+	RebuildBoundaries();
 }
 
-void Fluid::SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHeightCells, glm::vec2 obstacleCenterUV, float obstacleRadiusCells) {
-	windTunnel = true;
+void Fluid::SetupWindTunnel(float _inflowSpeed, float _jetCentreUVY, float _jetHeightCells, glm::vec2 _obstacleCenterUV, float _obstacleRadiusCells) {
 	inflowSpeed = _inflowSpeed;
+	jetCentreUVY = _jetCentreUVY;
+	jetHeightCells = _jetHeightCells;
+	windTunnelExitOpen = true;
 
-	int jetLo = static_cast<int>(round(jetCentreUVY * cellCountY - jetHeightCells / 2.0f));// round to nearest cell index
-	int jetHi = jetLo + static_cast<int>(jetHeightCells);// round to nearest cell index
+	obstacleEnabled = true;
+	obstacleType = ObstacleType::Circle;
+	obstacleCenterUV = _obstacleCenterUV;
+	obstacleRadiusCells = _obstacleRadiusCells;
 
-	jetLo = glm::clamp(jetLo, 1, cellCountY - 2);
-	jetHi = glm::clamp(jetHi, jetLo + 1, cellCountY - 1);
+	SetWindTunnelEnabled(true);
+}
 
+void Fluid::RebuildBoundaries() {
 	for (int x = 0; x < cellCountX; x++) {
 		for (int y = 0; y < cellCountY; y++) {
 			solidCell[indexXY(x, y)] = false;
 		}
 	}
 
-	for (int x = 0; x < cellCountX; x++) {// Top and bottom boundaries are solid cells
-		solidCell[indexXY(x, 0)] = true;
-		solidCell[indexXY(x, cellCountY - 1)] = true;
-	}
-
-	for(int y = 0; y < cellCountY; y++) {
-		if (y < jetLo || y >= jetHi) {
-			solidCell[indexXY(0, y)] = true;// Left boundary is solid except for the inflow jet
+	if (!windTunnel) {
+		//if wind tunnel is off, all boundaries are solid
+		for (int i = 0; i < cellCountX; i++) {
+			solidCell[indexXY(i, 0)] = true;
+			solidCell[indexXY(i, cellCountY - 1)] = true;
+		}
+		for (int i = 0; i < cellCountY; i++) {
+			solidCell[indexXY(0, i)] = true;
+			solidCell[indexXY(cellCountX - 1, i)] = true;
 		}
 	}
+	else {
+		//if wind tunnel is on, top and bottom boundaries are solid, left boundary is solid except for the inflow jet, right boundary is solid if exit is closed
+		for (int x = 0; x < cellCountX; x++) {
+			solidCell[indexXY(x, 0)] = true;
+			solidCell[indexXY(x, cellCountY - 1)] = true;
+		}
 
-	//Circular Obstacle
-	glm::vec2 center = bottomLeft + obstacleCenterUV * boundsSize;
-	float radius = obstacleRadiusCells * cellSize;
+		int jetLo = static_cast<int>(round(jetCentreUVY * cellCountY - jetHeightCells / 2.0f));
+		int jetHi = jetLo + static_cast<int>(jetHeightCells);
+		jetLo = glm::clamp(jetLo, 1, cellCountY - 2);
+		jetHi = glm::clamp(jetHi, jetLo + 1, cellCountY - 1);
 
-	for (int x = 0; x < cellCountX; x++) {
 		for (int y = 0; y < cellCountY; y++) {
-			if (glm::length(CellCenter(x, y) - center) < radius)
-				solidCell[indexXY(x, y)] = true;
+			if (y < jetLo || y >= jetHi) {
+				solidCell[indexXY(0, y)] = true;//Left boundary is solid except for the inflow jet
+			}
+		}
+
+		if (!windTunnelExitOpen) {
+			for (int y = 0; y < cellCountY; y++) {
+				solidCell[indexXY(cellCountX - 1, y)] = true;//if the exit is closed, the right boundary is solid
+			}
 		}
 	}
 
-	// Initialize the velocity and pressure fields to zero, then set the inflow speed on the left boundary faces.
+	ApplyObstacle();
+}
+
+void Fluid::ApplyObstacle() {
+	if (!obstacleEnabled || obstacleType == ObstacleType::None)
+		return;
+
+	glm::vec2 center = bottomLeft + obstacleCenterUV * boundsSize;
+
+	switch (obstacleType) {
+	case ObstacleType::Circle: {// Circular Obstacle
+		float radius = obstacleRadiusCells * cellSize;
+		for (int x = 0; x < cellCountX; x++) {
+			for (int y = 0; y < cellCountY; y++) {
+				if (glm::length(CellCenter(x, y) - center) < radius)
+					solidCell[indexXY(x, y)] = true;
+			}
+		}
+		break;
+	}
+	case ObstacleType::VerticalLine: {// Vertical Line Obstacle
+		float halfHeight = (obstacleHeightCells * cellSize) / 2.0f;
+		float halfThickness = (obstacleThicknessCells * cellSize) / 2.0f;
+		for (int x = 0; x < cellCountX; x++) {
+			for (int y = 0; y < cellCountY; y++) {
+				glm::vec2 c = CellCenter(x, y);
+				if (glm::abs(c.x - center.x) < halfThickness && glm::abs(c.y - center.y) < halfHeight)
+					solidCell[indexXY(x, y)] = true;
+			}
+		}
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void Fluid::SetWindTunnelEnabled(bool enabled) {
+	windTunnel = enabled;
+	RebuildBoundaries();
+
 	resetVelocityX();
 	resetVelocityY();
 	resetCellPressure();
 
-	for (int x = 0; x < cellCountX + 1; x++) {
-		for (int y = 0; y < cellCountY; y++) {
-			if (isSolid(x - 1, y) || isSolid(x, y))
-				continue;
-			velocityX[indexVX(x, y)] = inflowSpeed;
+	if (windTunnel) {
+		for (int x = 0; x < cellCountX + 1; x++) {// Re-apply inflow speed on the left boundary faces
+			for (int y = 0; y < cellCountY; y++) {
+				if (isSolid(x - 1, y) || isSolid(x, y))
+					continue;
+				velocityX[indexVX(x, y)] = inflowSpeed;
+			}
 		}
 	}
 
-	ClearDye();
+	ClearDye();// Clear the dye field when enabling or disabling the wind tunnel
 }
 
 void Fluid::ApplyInflow() {
@@ -450,6 +524,33 @@ void Fluid::AddVelocity(glm::vec2 uv, glm::vec2 velocity, float radiusCells) {
 	}
 }
 
+void Fluid::SetWindTunnelExitOpen(bool open) {
+	windTunnelExitOpen = open;
+	RebuildBoundaries();
+}
+
+void Fluid::SetObstacleEnabled(bool enabled) {
+	obstacleEnabled = enabled;
+	RebuildBoundaries();
+}
+
+void Fluid::SetObstacle(ObstacleType type, glm::vec2 _obstacleCenterUV, float _obstacleRadiusCells) {
+	obstacleType = type;
+	obstacleEnabled = true;
+	obstacleCenterUV = _obstacleCenterUV;
+	obstacleRadiusCells = _obstacleRadiusCells;
+	RebuildBoundaries();
+}
+
+void Fluid::SetObstacleLine(glm::vec2 _obstacleCenterUV, float _obstacleHeightCells, float _obstacleThicknessCells) {
+	obstacleType = ObstacleType::VerticalLine;
+	obstacleEnabled = true;
+	obstacleCenterUV = _obstacleCenterUV;
+	obstacleHeightCells = _obstacleHeightCells;
+	obstacleThicknessCells = _obstacleThicknessCells;
+	RebuildBoundaries();
+}
+
 void Fluid::resetVelocityX() {
 	for (int x = 0; x < (cellCountX + 1); x++) {
 		for (int y = 0; y < cellCountY; y++) {
@@ -512,8 +613,8 @@ bool::Fluid::isSolid(int cellX, int cellY) {
 	if (cellX < 0 || cellY < 0 || cellY >= cellCountY)
 		return true;
 
-	if (cellX >= cellCountX)// The right boundary is not solid in a wind tunnel, so we don't return true here.
-		return !windTunnel;
+	if (cellX >= cellCountX)// The right boundary is solid if the wind tunnel is off or the exit is closed
+		return !(windTunnel && windTunnelExitOpen);
 
 	return solidCell[indexXY(cellX, cellY)];
 }

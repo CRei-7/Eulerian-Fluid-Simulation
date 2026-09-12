@@ -30,7 +30,7 @@ public:
 
     void AddVelocity(glm::vec2 uv, glm::vec2 velocity, float radiusCells);
 
-    void SetupWindTunnel(float _inflowSpeed, float jetCentreUVY, float jetHeightCells, glm::vec2 obstacleCenterUV, float obstacleRadiusCells);
+    void SetupWindTunnel(float _inflowSpeed, float _jetCentreUVY, float _jetHeightCells, glm::vec2 _obstacleCenterUV, float _obstacleRadiusCells);
 
     void AdvectDye();
     void EmitDye(glm::vec2 uv, float radiusCells, float strength = 1.0f);
@@ -44,6 +44,15 @@ public:
     void resetVelocityX();
     void resetVelocityY();
     void resetCellPressure();
+
+    enum class ObstacleType { None, Circle, VerticalLine };
+
+    void SetWindTunnelEnabled(bool enabled);
+    void SetWindTunnelExitOpen(bool open);
+
+    void SetObstacleEnabled(bool enabled);
+    void SetObstacle(ObstacleType type, glm::vec2 obstacleCenterUV, float obstacleRadiusCells); //circular obstacle
+	void SetObstacleLine(glm::vec2 obstacleCenterUV, float obstacleHeightCells, float obstacleThicknessCells); //vertical line obstacle 
 
 private:
     int cellCountX;
@@ -79,6 +88,20 @@ private:
 
     bool windTunnel;
     float inflowSpeed;
+
+    bool windTunnelExitOpen;
+    float jetCentreUVY;
+    float jetHeightCells;
+
+    bool obstacleEnabled;
+    ObstacleType obstacleType;
+    glm::vec2 obstacleCenterUV;
+    float obstacleRadiusCells;
+    float obstacleHeightCells;
+    float obstacleThicknessCells;
+
+	void RebuildBoundaries(); //Updates solidCell[] to include the current boundaries (wind tunnel, obstacle, etc.)
+	void ApplyObstacle(); //Updates solidCell[] to include the current obstacle (if any)
 
     void ApplyInflow();
 

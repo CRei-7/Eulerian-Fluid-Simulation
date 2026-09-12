@@ -49,6 +49,18 @@ const float dyeEmitUVX = 0.0f;// x position of the dye emitter
 const float dyeEmitRadiusCells = 2.0f;
 const float dyeDecayRate = 2.0f;
 
+bool obstacleOn = true;
+bool windTunnelOn = true;
+bool exitOpen = true;
+Fluid::ObstacleType currentObstacleType = Fluid::ObstacleType::Circle;
+
+bool prevObstacleKey = false;
+bool prevObstacleTypeKey = false;
+bool prevWindTunnelKey = false;
+bool prevExitKey = false;
+
+const float mouseDyeRadiusCells = 4.0f;
+
 Fluid fluid(xCount, yCount, 1.0f / xCount, density, deltaTime);
 
 void CreateShaders() {
@@ -101,13 +113,16 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	std::vector<unsigned char> solidData(xCount * yCount);
-	const bool* solidPtr = fluid.GetSolidData();
-	for (unsigned int i = 0; i < xCount * yCount; i++)
-		solidData[i] = solidPtr[i] ? 255 : 0; // Stores values for single channel data, in our case Red
+	//std::vector<unsigned char> solidData(xCount * yCount);
+	//const bool* solidPtr = fluid.GetSolidData();
+	//for (unsigned int i = 0; i < xCount * yCount; i++)
+	//	solidData[i] = solidPtr[i] ? 255 : 0; // Stores values for single channel data, in our case Red
 
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // safety for tight-packed single-channel rows
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, xCount, yCount, 0, GL_RED, GL_UNSIGNED_BYTE, solidData.data());
+	//glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // safety for tight-packed single-channel rows
+	//glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, xCount, yCount, 0, GL_RED, GL_UNSIGNED_BYTE, solidData.data());
+
+	std::vector<unsigned char> solidData(xCount * yCount); // refilled every frame below, since obstacles/wind tunnel can toggle at runtime
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 	unsigned int velTex;
 	glGenTextures(1, &velTex);
@@ -125,7 +140,7 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	fluid.RandomizeVelocities(2.0f);
+	//fluid.RandomizeVelocities(2.0f);
 
 	std::vector<float> velMagnitudes = fluid.GetVelocityMagnitudes();
 
@@ -141,16 +156,57 @@ int main() {
 		GLfloat dx = mainWindow.getxChange();
 		GLfloat dy = mainWindow.getyChange();
 
+		bool* keys = mainWindow.getKeys();// Get the current state of keys
+
+		if (keys[GLFW_KEY_O] && !prevObstacleKey) {//Toggle obstacle on/off
+			obstacleOn = !obstacleOn;
+			fluid.SetObstacleEnabled(obstacleOn);
+		}
+		prevObstacleKey = keys[GLFW_KEY_O];
+
+		if (keys[GLFW_KEY_L] && !prevObstacleTypeKey) {//Toggle obstacle type between Circle and Line
+			currentObstacleType = (currentObstacleType == Fluid::ObstacleType::Circle)
+				? Fluid::ObstacleType::VerticalLine : Fluid::ObstacleType::Circle;
+
+			if (currentObstacleType == Fluid::ObstacleType::Circle)
+				fluid.SetObstacle(Fluid::ObstacleType::Circle, obstacleCenterUV, obstacleRadiusCells);
+			else
+				fluid.SetObstacleLine(obstacleCenterUV, static_cast<float>(yCount) * 0.5f, 3.0f);
+		}
+		prevObstacleTypeKey = keys[GLFW_KEY_L];
+
+		if (keys[GLFW_KEY_T] && !prevWindTunnelKey) {//Toggle wind tunnel on/off
+			windTunnelOn = !windTunnelOn;
+			fluid.SetWindTunnelEnabled(windTunnelOn);
+		}
+		prevWindTunnelKey = keys[GLFW_KEY_T];
+
+		if (keys[GLFW_KEY_E] && !prevExitKey) {//Toggle wind tunnel exit open/closed
+			exitOpen = !exitOpen;
+			fluid.SetWindTunnelExitOpen(exitOpen);
+		}
+		prevExitKey = keys[GLFW_KEY_E];
+
 		if (mainWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
 			const float mouseStrength = 60.0f;
 			glm::vec2 mouseVelocity(dx / SCR_WIDTH * mouseStrength, dy / SCR_HEIGHT * mouseStrength);
 			fluid.AddVelocity(mouseUV, mouseVelocity, 8.0f);
+
+			fluid.EmitDye(mouseUV, mouseDyeRadiusCells);
 		}
 
 		fluid.EmitDye(glm::vec2(dyeEmitUVX, jetCentreUVY), dyeEmitRadiusCells);
 		fluid.EmitDye(glm::vec2(dyeEmitUVX, jetCentreUVY), dyeEmitRadiusCells);
 
 		fluid.Simulate(40);
+
+		const bool* solidPtr = fluid.GetSolidData();
+		for (unsigned int i = 0; i < xCount * yCount; i++)
+			solidData[i] = solidPtr[i] ? 255 : 0;// If the cell is solid, store 255, else store 0.
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, solidTex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, xCount, yCount, 0, GL_RED, GL_UNSIGNED_BYTE, solidData.data());
 
 		velMagnitudes = fluid.GetVelocityMagnitudes();
 		glActiveTexture(GL_TEXTURE1);
