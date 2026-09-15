@@ -30,7 +30,7 @@ std::vector<Shader> shaderList;
 
 const char* glsl_version = "#version 430";
 
-const unsigned int xCount = 120;
+const unsigned int xCount = 350;
 const unsigned int yCount = static_cast<unsigned int>(static_cast<float>(xCount) * SCR_HEIGHT / SCR_WIDTH);
 
 float density = 1000.0f;
@@ -38,15 +38,15 @@ float deltaTime = 1.0f / 60.0f;
 
 const float inflowSpeed = 2.0f;
 const glm::vec2 obstacleCenterUV(0.3f, 0.50f); 
-const float obstacleRadiusCells = 9.0f;
+const float obstacleRadiusCells = 27.0f;
 
 const float jetCentreUVY = 0.5f; // vertical centre of the inflow jet
 const float jetHeightCells = static_cast<float>(yCount); // height of the inflow jet in cells
 
-const float maxSpeed = inflowSpeed * 1.5f;
+const float maxSpeed = inflowSpeed * 1.25f;
 
 const float dyeEmitUVX = 0.0f;// x position of the dye emitter
-const float dyeEmitRadiusCells = 2.0f;
+const float dyeEmitRadiusCells = 7.0f;
 const float dyeDecayRate = 2.0f;
 
 bool obstacleOn = true;
@@ -59,7 +59,7 @@ bool prevObstacleTypeKey = false;
 bool prevWindTunnelKey = false;
 bool prevExitKey = false;
 
-const float mouseDyeRadiusCells = 4.0f;
+const float mouseDyeRadiusCells = 25.0f;
 
 Fluid fluid(xCount, yCount, 1.0f / xCount, density, deltaTime);
 
@@ -113,14 +113,6 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	//std::vector<unsigned char> solidData(xCount * yCount);
-	//const bool* solidPtr = fluid.GetSolidData();
-	//for (unsigned int i = 0; i < xCount * yCount; i++)
-	//	solidData[i] = solidPtr[i] ? 255 : 0; // Stores values for single channel data, in our case Red
-
-	//glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // safety for tight-packed single-channel rows
-	//glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, xCount, yCount, 0, GL_RED, GL_UNSIGNED_BYTE, solidData.data());
-
 	std::vector<unsigned char> solidData(xCount * yCount); // refilled every frame below, since obstacles/wind tunnel can toggle at runtime
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
@@ -165,8 +157,7 @@ int main() {
 		prevObstacleKey = keys[GLFW_KEY_O];
 
 		if (keys[GLFW_KEY_L] && !prevObstacleTypeKey) {//Toggle obstacle type between Circle and Line
-			currentObstacleType = (currentObstacleType == Fluid::ObstacleType::Circle)
-				? Fluid::ObstacleType::VerticalLine : Fluid::ObstacleType::Circle;
+			currentObstacleType = (currentObstacleType == Fluid::ObstacleType::Circle) ? Fluid::ObstacleType::VerticalLine : Fluid::ObstacleType::Circle;
 
 			if (currentObstacleType == Fluid::ObstacleType::Circle)
 				fluid.SetObstacle(Fluid::ObstacleType::Circle, obstacleCenterUV, obstacleRadiusCells);
@@ -195,7 +186,6 @@ int main() {
 			fluid.EmitDye(mouseUV, mouseDyeRadiusCells);
 		}
 
-		fluid.EmitDye(glm::vec2(dyeEmitUVX, jetCentreUVY), dyeEmitRadiusCells);
 		fluid.EmitDye(glm::vec2(dyeEmitUVX, jetCentreUVY), dyeEmitRadiusCells);
 
 		fluid.Simulate(40);

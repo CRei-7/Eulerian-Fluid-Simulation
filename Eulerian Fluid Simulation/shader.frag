@@ -34,7 +34,10 @@ void main(){
 	vec3 lineColor = vec3(1.0, 1.0, 1.0);
 
 	float solid = texture(uSolidMask, vUV).r;//for solid cells
-	vec3 solidColor = vec3(0.2, 0.2, 0.2);
+	
+	float edge = fwidth(solid) * 3.0f;
+	vec3 solidColor = mix(vec3(0.2), vec3(1.0), clamp(edge, 0.0, 1.0));
+	//vec3 solidColor = vec3(0.2, 0.2, 0.2);
 
 	vec3 base = mix(flowColor, solidColor, solid);
 	FragColor = vec4(mix(base, lineColor, line), 1.0);//interpolates between base and lineColor using line; (1-line)*base + line*lineColor

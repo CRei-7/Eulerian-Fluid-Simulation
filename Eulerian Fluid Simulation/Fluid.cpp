@@ -54,16 +54,6 @@ Fluid::Fluid(int _cellCountX, int _cellCountY, float _cellSize, float _density, 
 	dye_back = new float[cellCountX * cellCountY]();
 	dyeDecay = 0.0f;
 
-	//for (int i = 0; i < cellCountX; i++) {// Boundary cells are solid cells
-	//	solidCell[indexXY(i, 0)] = true;
-	//	solidCell[indexXY(i, cellCountY - 1)] = true;
-	//}
-
-	//for (int i = 0; i < cellCountY; i++) {
-	//	solidCell[indexXY(0, i)] = true;
-	//	solidCell[indexXY(cellCountX - 1, i)] = true;
-	//}
-
 	boundsSize = glm::vec2(static_cast<float>(cellCountX), static_cast<float>(cellCountY)) * cellSize;
 	bottomLeft = -(boundsSize / 2.0f);
 	halfCellSize = cellSize / 2.0f;
